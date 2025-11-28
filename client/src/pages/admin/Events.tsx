@@ -369,7 +369,7 @@ export default function AdminEvents() {
                 </div>
               </div>
             </CardContent>
-            {event.status === 'ongoing' && (
+            {event.status !== 'completed' && (
                <div className="p-4 pt-0 mt-auto">
                   <Button 
                     className="w-full bg-slate-800 hover:bg-slate-700 gap-2" 
