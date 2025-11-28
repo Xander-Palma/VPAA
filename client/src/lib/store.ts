@@ -3,6 +3,14 @@ import { create } from 'zustand';
 // Types used by the frontend (kept simple and matching backend fields)
 export type UserRole = 'admin' | 'participant';
 
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  role?: UserRole;
+  [key: string]: any;
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -36,16 +44,17 @@ interface AppState {
   token: string | null;
   events: Event[];
   participants: Record<string, Participant[]>; // eventId -> participants
-  login: (username: string, password: string) => Promise<void>;
+  login: (usernameOrUser: any, password?: string) => Promise<void>;
   logout: () => void;
   fetchEvents: () => Promise<void>;
   addEvent: (event: Partial<Event>) => Promise<Event | null>;
   updateEvent: (id: string | number, event: Partial<Event>) => Promise<Event | null>;
   deleteEvent: (id: string | number) => Promise<boolean>;
-  joinEvent: (eventId: string | number, name: string, email: string) => Promise<Participant | null>;
+  joinEvent: (eventId: string | number, a?: any, b?: any) => Promise<Participant | null>;
   markAttendance: (participantId: string | number, status: string) => Promise<Participant | null>;
   submitEvaluation: (participantId: string | number, data: any) => Promise<Participant | null>;
   issueCertificate: (participantId: string | number) => Promise<Participant | null>;
+  register: (email: string, name: string, password: string) => Promise<void>;
 }
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
@@ -81,7 +90,7 @@ function normalizeParticipant(raw: any): Participant {
   };
 }
 
-function authHeaders(token?: string) {
+function authHeaders(token?: string): Record<string, string> {
   const t = token ?? localStorage.getItem('token');
   return t ? { Authorization: `Token ${t}` } : {};
 }
@@ -112,7 +121,7 @@ export const useStore = create<AppState>((set, get) => {
 
       // login can accept either (username, password) or a user object (legacy mock)
       login: async (usernameOrUser: any, password?: string) => {
-          // Legacy path: called with a user object from existing UI mock
+        // Legacy path: called with a user object from existing UI mock
           if (typeof usernameOrUser === 'object') {
             const userObj: User = usernameOrUser as User;
             // do not set a token when using the local mock user
@@ -156,7 +165,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     fetchEvents: async () => {
-      const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/events/`, { headers });
       if (!res.ok) {
         return;
@@ -171,7 +180,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     addEvent: async (event) => {
-      const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/events/`, { method: 'POST', headers, body: JSON.stringify(event) });
       if (!res.ok) return null;
       const createdRaw: any = await res.json();
@@ -181,7 +190,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     updateEvent: async (id, event) => {
-      const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/events/${id}/`, { method: 'PATCH', headers, body: JSON.stringify(event) });
       if (!res.ok) return null;
       const updatedRaw: any = await res.json();
@@ -191,7 +200,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     deleteEvent: async (id) => {
-      const headers = { ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/events/${id}/`, { method: 'DELETE', headers });
       if (!res.ok) return false;
       set((s) => ({ events: s.events.filter((e) => String(e.id) !== String(id)) }));
@@ -211,7 +220,7 @@ export const useStore = create<AppState>((set, get) => {
         email = b ?? '';
       }
 
-      const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/events/${eventId}/join/`, {
         method: 'POST',
         headers,
@@ -233,7 +242,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     markAttendance: async (participantId, status) => {
-      const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/participants/${participantId}/`, { method: 'PATCH', headers, body: JSON.stringify({ status }) });
       if (!res.ok) return null;
       const updatedRaw: any = await res.json();
@@ -250,7 +259,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     submitEvaluation: async (participantId, data) => {
-      const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/participants/${participantId}/`, { method: 'PATCH', headers, body: JSON.stringify({ has_evaluated: true, evaluation_data: data }) });
       if (!res.ok) return null;
       const updatedRaw: any = await res.json();
@@ -266,7 +275,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     issueCertificate: async (participantId) => {
-      const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/participants/${participantId}/`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'completed' }) });
       if (!res.ok) return null;
       const updatedRaw: any = await res.json();
@@ -280,6 +289,25 @@ export const useStore = create<AppState>((set, get) => {
       });
       return updated;
     },
+
+    register: async (email, name, password) => {
+      const headers: Record<string,string> = { 'Content-Type': 'application/json' };
+      const res = await fetch(`${API_BASE}/auth/register/`, { method: 'POST', headers, body: JSON.stringify({ email, password, name }) });
+      if (!res.ok) {
+        const err = await safeJson(res as unknown as Response);
+        const message = (err && typeof err === 'object' && err.detail) ? err.detail : (typeof err === 'string' ? err : 'Register failed');
+        throw new Error(message);
+      }
+      const data = await res.json();
+      const token = data.token;
+      const user = data.user;
+      setAuth(user, token);
+      try {
+        await get().fetchEvents();
+      } catch (e) {
+        console.error('fetchEvents failed after register', e);
+      }
+    },
   };
 
   // try to load current user + events if token exists
@@ -287,7 +315,8 @@ export const useStore = create<AppState>((set, get) => {
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      const meRes = await fetch(`${API_BASE}/auth/me/`, { headers: { ...authHeaders(token), 'Content-Type': 'application/json' } });
+      const meHeaders: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(token) };
+      const meRes = await fetch(`${API_BASE}/auth/me/`, { headers: meHeaders });
       if (meRes.ok) {
         const meData = await meRes.json();
         if (meData?.user) set({ currentUser: meData.user, token });

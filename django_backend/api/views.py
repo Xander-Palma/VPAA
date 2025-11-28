@@ -64,3 +64,23 @@ def me(request):
     if not request.user or not request.user.is_authenticated:
         return Response({'user': None})
     return Response({'user': UserSerializer(request.user).data})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register_view(request):
+    # create a new user (participant)
+    email = request.data.get('email')
+    password = request.data.get('password')
+    name = request.data.get('name') or ''
+    username = request.data.get('username') or (email.split('@')[0] if email else None)
+
+    if not email or not password:
+        return Response({'detail': 'Missing fields'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(username=username).exists():
+        return Response({'detail': 'User already exists'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.create_user(username=username, email=email, password=password, first_name=name)
+    token = Token.objects.create(user=user)
+    return Response({'token': token.key, 'user': UserSerializer(user).data}, status=status.HTTP_201_CREATED)

@@ -68,13 +68,16 @@ export function Sidebar() {
 
       <div className="p-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3 mb-4 px-2">
-          <div className="h-8 w-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-bold">
-            {currentUser?.name.charAt(0)}
-          </div>
-          <div className="overflow-hidden">
-            <p className="text-sm font-medium truncate">{currentUser?.name}</p>
-            <p className="text-xs text-sidebar-foreground/70 truncate">{currentUser?.email}</p>
-          </div>
+            <div className="h-8 w-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-bold">
+              {(() => {
+                const display = currentUser?.name || currentUser?.first_name || currentUser?.username || currentUser?.email || '';
+                return display ? display.charAt(0).toUpperCase() : '';
+              })()}
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-sm font-medium truncate">{currentUser?.name || currentUser?.first_name || currentUser?.username || currentUser?.email}</p>
+              <p className="text-xs text-sidebar-foreground/70 truncate">{currentUser?.email}</p>
+            </div>
         </div>
         <button 
           onClick={() => logout()}

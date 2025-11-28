@@ -12,7 +12,7 @@ import generatedImage from '@assets/generated_images/vpaa_event_system_logo.png'
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { login } = useStore();
+  const { login, register } = useStore();
   const { toast } = useToast();
   
   const [email, setEmail] = useState("");
@@ -37,20 +37,29 @@ export default function Login() {
         toast({ variant: "destructive", title: "Invalid credentials", description: "Please check your email and password." });
       }
     } else {
-      // User login logic
-      if (email.endsWith("@hcdc.edu.ph") && password) {
-        login({
-          id: "user-" + Math.random().toString(36).substr(2, 9),
-          email: email,
-          name: email.split("@")[0], // Mock name from email
-          role: "participant",
-          institutionId: "ID-" + Math.random().toString().substr(2, 6)
-        });
-        toast({ title: "Login Successful" });
-        setLocation("/participant/dashboard");
-      } else {
-        toast({ variant: "destructive", title: "Login Failed", description: "Please use a valid @hcdc.edu.ph email." });
+      // Participant login via API. If account doesn't exist, register then login.
+      if (!email.endsWith("@hcdc.edu.ph") || !password) {
+        toast({ variant: "destructive", title: "Login Failed", description: "Please use a valid @hcdc.edu.ph email and password." });
+        return;
       }
+
+      (async () => {
+        try {
+          await login(email, password);
+          toast({ title: "Login Successful" });
+          setLocation("/participant/dashboard");
+        } catch (err: any) {
+          // if login failed, attempt to register the participant (auto-create)
+            try {
+            const name = email.split("@")[0];
+            await register(email, name, password);
+            toast({ title: "Account created and logged in" });
+            setLocation("/participant/dashboard");
+          } catch (regErr: any) {
+            toast({ variant: "destructive", title: "Login Failed", description: regErr?.message || 'Unable to login or create account.' });
+          }
+        }
+      })();
     }
   };
 
