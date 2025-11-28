@@ -8,7 +8,13 @@ import Login from "@/pages/auth/Login";
 import { Layout } from "@/components/layout/Layout";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminEvents from "@/pages/admin/Events";
+import AdminAttendance from "@/pages/admin/Attendance";
+import AdminCertificates from "@/pages/admin/Certificates";
+import AdminReports from "@/pages/admin/Reports";
+
 import ParticipantDashboard from "@/pages/participant/Dashboard";
+import ParticipantCertificates from "@/pages/participant/Certificates";
+import ParticipantScan from "@/pages/participant/Scan";
 
 function Router() {
   return (
@@ -28,17 +34,17 @@ function Router() {
       </Route>
       <Route path="/admin/attendance">
          <Layout>
-            <div className="p-4">Attendance Module (Coming Soon)</div>
+            <AdminAttendance />
          </Layout>
       </Route>
       <Route path="/admin/certificates">
          <Layout>
-            <div className="p-4">Certificate Module (Coming Soon)</div>
+            <AdminCertificates />
          </Layout>
       </Route>
       <Route path="/admin/reports">
          <Layout>
-            <div className="p-4">Reports Module (Coming Soon)</div>
+            <AdminReports />
          </Layout>
       </Route>
 
@@ -50,12 +56,12 @@ function Router() {
       </Route>
       <Route path="/participant/my-certificates">
          <Layout>
-            <div className="p-4">My Certificates (Coming Soon)</div>
+            <ParticipantCertificates />
          </Layout>
       </Route>
       <Route path="/participant/scan">
          <Layout>
-            <div className="p-4">QR Scanner (Coming Soon)</div>
+            <ParticipantScan />
          </Layout>
       </Route>
 

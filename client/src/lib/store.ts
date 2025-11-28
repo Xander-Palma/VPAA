@@ -46,7 +46,11 @@ interface AppState {
   login: (user: User) => void;
   logout: () => void;
   addEvent: (event: Event) => void;
+  updateEvent: (id: string, event: Partial<Event>) => void;
+  deleteEvent: (id: string) => void;
   joinEvent: (eventId: string, user: User) => void;
+  markAttendance: (eventId: string, participantId: string, status: 'registered' | 'attended' | 'completed') => void;
+  issueCertificate: (eventId: string, participantId: string) => void;
 }
 
 export const MOCK_EVENTS: Event[] = [
@@ -107,9 +111,14 @@ export const useStore = create<AppState>((set) => ({
   login: (user) => set({ currentUser: user }),
   logout: () => set({ currentUser: null }),
   addEvent: (event) => set((state) => ({ events: [event, ...state.events] })),
+  updateEvent: (id, updatedEvent) => set((state) => ({
+    events: state.events.map((e) => (e.id === id ? { ...e, ...updatedEvent } : e))
+  })),
+  deleteEvent: (id) => set((state) => ({
+    events: state.events.filter((e) => e.id !== id)
+  })),
   joinEvent: (eventId, user) => set((state) => {
     const currentParticipants = state.participants[eventId] || [];
-    // Avoid duplicates
     if (currentParticipants.find(p => p.email === user.email)) return state;
     
     return {
@@ -122,5 +131,32 @@ export const useStore = create<AppState>((set) => ({
       },
       events: state.events.map(e => e.id === eventId ? { ...e, participantsCount: e.participantsCount + 1 } : e)
     };
+  }),
+  markAttendance: (eventId, participantId, status) => set((state) => {
+    const eventParticipants = state.participants[eventId] || [];
+    const updatedParticipants = eventParticipants.map(p => 
+      p.id === participantId 
+        ? { ...p, status, checkInTime: status === 'attended' ? new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : undefined } 
+        : p
+    );
+    return {
+      participants: {
+        ...state.participants,
+        [eventId]: updatedParticipants
+      }
+    };
+  }),
+  issueCertificate: (eventId, participantId) => set((state) => {
+     // In a real app, this would generate a record. For now, we just assume 'completed' status implies certificate.
+     const eventParticipants = state.participants[eventId] || [];
+     const updatedParticipants = eventParticipants.map(p => 
+       p.id === participantId ? { ...p, status: 'completed' as const } : p
+     );
+     return {
+       participants: {
+         ...state.participants,
+         [eventId]: updatedParticipants
+       }
+     };
   })
 }));
