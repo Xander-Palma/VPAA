@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileCheck, Download, Mail, RefreshCcw } from "lucide-react";
+import { FileCheck, Download, Mail, RefreshCcw, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AdminCertificates() {
@@ -17,7 +17,21 @@ export default function AdminCertificates() {
   const selectedEvent = events.find(e => e.id === selectedEventId);
   const eventParticipants = selectedEventId ? (participants[selectedEventId] || []) : [];
   
-  const eligibleParticipants = eventParticipants.filter(p => p.status === 'attended');
+  // Logic for eligibility: Must have attended. 
+  // If evaluation is required, must have evaluated.
+  const isEligible = (p: any) => {
+    if (!selectedEvent) return false;
+    const attended = p.status === 'attended' || p.status === 'completed';
+    const evalReq = selectedEvent.requirements.evaluation;
+    const hasEval = p.hasEvaluated;
+    
+    if (!attended) return false;
+    if (evalReq && !hasEval) return false;
+    
+    return p.status !== 'completed'; // Already issued
+  };
+
+  const eligibleParticipants = eventParticipants.filter(isEligible);
   const completedParticipants = eventParticipants.filter(p => p.status === 'completed');
 
   const handleIssueCertificate = (participantId: string) => {
@@ -88,7 +102,7 @@ export default function AdminCertificates() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Attendance</TableHead>
+                      <TableHead>Requirements</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -105,9 +119,16 @@ export default function AdminCertificates() {
                           <TableCell className="font-medium">{p.name}</TableCell>
                           <TableCell>{p.email}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                              Verified
-                            </Badge>
+                            <div className="flex gap-2">
+                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                    Attended
+                                </Badge>
+                                {p.hasEvaluated && (
+                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                        Evaluated
+                                    </Badge>
+                                )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button size="sm" onClick={() => handleIssueCertificate(p.id)}>

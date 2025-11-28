@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Search, Calendar as CalendarIcon, MapPin, Clock, MoreHorizontal, Edit, Trash, Users, AlertTriangle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Search, Calendar as CalendarIcon, MapPin, Clock, MoreHorizontal, Edit, Trash, Users, AlertTriangle, CheckCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -99,6 +100,11 @@ export default function AdminEvents() {
     setIsDeleteOpen(false);
     toast({ title: "Event Deleted", description: "The event has been removed." });
   };
+  
+  const handleConcludeEvent = (event: Event) => {
+    updateEvent(event.id, { status: 'completed' });
+    toast({ title: "Event Concluded", description: "Event marked as completed. Evaluation forms released." });
+  };
 
   const handleViewParticipants = (event: Event) => {
     setSelectedEvent(event);
@@ -181,10 +187,6 @@ export default function AdminEvents() {
       </div>
     </div>
   );
-  
-  // Need to import Select components locally inside the component for the form to work if I use them
-  // But for now I used standard Inputs. Let's add Select import at top if I want to use it for Status.
-  // I added Select imports.
 
   return (
     <div className="space-y-6">
@@ -260,12 +262,13 @@ export default function AdminEvents() {
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Evaluation</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {selectedEvent && (!participants[selectedEvent.id] || participants[selectedEvent.id].length === 0) ? (
                         <TableRow>
-                            <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                            <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                                 No participants registered yet.
                             </TableCell>
                         </TableRow>
@@ -278,6 +281,13 @@ export default function AdminEvents() {
                                     <Badge variant={p.status === 'attended' || p.status === 'completed' ? 'default' : 'secondary'}>
                                         {p.status}
                                     </Badge>
+                                </TableCell>
+                                <TableCell>
+                                    {p.hasEvaluated ? (
+                                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Submitted</Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground text-sm">-</span>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))
@@ -301,7 +311,7 @@ export default function AdminEvents() {
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {filteredEvents.map((event) => (
-          <Card key={event.id} className="overflow-hidden hover:shadow-md transition-shadow group">
+          <Card key={event.id} className="overflow-hidden hover:shadow-md transition-shadow group flex flex-col">
             <div className={`h-2 w-full ${
                 event.status === 'ongoing' ? 'bg-green-500' : 
                 event.status === 'completed' ? 'bg-slate-400' : 'bg-primary'
@@ -339,7 +349,7 @@ export default function AdminEvents() {
               </div>
               <CardTitle className="line-clamp-1 text-xl">{event.title}</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1">
               <div className="space-y-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <CalendarIcon className="h-4 w-4 text-primary/70" />
@@ -359,10 +369,19 @@ export default function AdminEvents() {
                 </div>
               </div>
             </CardContent>
+            {event.status === 'ongoing' && (
+               <div className="p-4 pt-0 mt-auto">
+                  <Button 
+                    className="w-full bg-slate-800 hover:bg-slate-700 gap-2" 
+                    onClick={() => handleConcludeEvent(event)}
+                  >
+                    <CheckCircle className="h-4 w-4" /> Conclude Event
+                  </Button>
+               </div>
+            )}
           </Card>
         ))}
       </div>
     </div>
   );
 }
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

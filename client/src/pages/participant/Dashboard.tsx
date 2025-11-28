@@ -1,13 +1,17 @@
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, MapPin, CheckCircle2 } from "lucide-react";
+import { Calendar, Clock, MapPin, CheckCircle2, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { EvaluationForm } from "./Evaluation";
 
 export default function ParticipantDashboard() {
   const { events, currentUser, joinEvent, participants } = useStore();
   const { toast } = useToast();
+  const [evalOpen, setEvalOpen] = useState<string | null>(null);
 
   const handleJoin = (eventId: string) => {
     if (currentUser) {
@@ -16,9 +20,9 @@ export default function ParticipantDashboard() {
     }
   };
 
-  const isRegistered = (eventId: string) => {
+  const getParticipantRecord = (eventId: string) => {
     const eventParticipants = participants[eventId] || [];
-    return eventParticipants.some(p => p.email === currentUser?.email);
+    return eventParticipants.find(p => p.email === currentUser?.email);
   };
 
   return (
@@ -30,7 +34,11 @@ export default function ParticipantDashboard() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {events.map((event) => {
-          const registered = isRegistered(event.id);
+          const record = getParticipantRecord(event.id);
+          const isRegistered = !!record;
+          const hasAttended = record?.status === 'attended' || record?.status === 'completed';
+          const hasEvaluated = record?.hasEvaluated;
+          const canEvaluate = event.status === 'completed' && hasAttended && !hasEvaluated;
           
           return (
             <Card key={event.id} className="flex flex-col shadow-sm hover:shadow-md transition-all">
@@ -75,13 +83,29 @@ export default function ParticipantDashboard() {
               </CardContent>
 
               <CardFooter className="pt-0">
-                {registered ? (
+                {canEvaluate ? (
+                   <Dialog open={evalOpen === event.id} onOpenChange={(open) => setEvalOpen(open ? event.id : null)}>
+                     <DialogTrigger asChild>
+                       <Button className="w-full gap-2 bg-yellow-500 hover:bg-yellow-600 text-white">
+                         <ClipboardList className="h-4 w-4" /> Evaluate Event
+                       </Button>
+                     </DialogTrigger>
+                     <DialogContent className="sm:max-w-[500px]">
+                       <EvaluationForm 
+                         eventId={event.id} 
+                         participantId={record!.id} 
+                         onClose={() => setEvalOpen(null)} 
+                       />
+                     </DialogContent>
+                   </Dialog>
+                ) : isRegistered ? (
                   <Button variant="secondary" className="w-full gap-2 bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-100" disabled>
-                    <CheckCircle2 className="h-4 w-4" /> Registered
+                    <CheckCircle2 className="h-4 w-4" /> 
+                    {hasEvaluated ? "Completed" : hasAttended ? "Attended" : "Registered"}
                   </Button>
                 ) : (
-                  <Button className="w-full" onClick={() => handleJoin(event.id)}>
-                    Join Event
+                  <Button className="w-full" onClick={() => handleJoin(event.id)} disabled={event.status === 'completed'}>
+                    {event.status === 'completed' ? "Event Ended" : "Join Event"}
                   </Button>
                 )}
               </CardFooter>

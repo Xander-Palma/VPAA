@@ -36,6 +36,8 @@ export interface Participant {
   status: 'registered' | 'attended' | 'completed';
   checkInTime?: string;
   checkOutTime?: string;
+  hasEvaluated?: boolean;
+  evaluationData?: any;
 }
 
 // Mock Store
@@ -50,6 +52,7 @@ interface AppState {
   deleteEvent: (id: string) => void;
   joinEvent: (eventId: string, user: User) => void;
   markAttendance: (eventId: string, participantId: string, status: 'registered' | 'attended' | 'completed') => void;
+  submitEvaluation: (eventId: string, participantId: string, data: any) => void;
   issueCertificate: (eventId: string, participantId: string) => void;
 }
 
@@ -98,8 +101,8 @@ export const MOCK_PARTICIPANTS: Record<string, Participant[]> = {
     { id: 'p2', name: 'Jane Smith', email: 'jane@hcdc.edu.ph', status: 'registered' }
   ],
   '2': [
-    { id: 'p3', name: 'Alice Johnson', email: 'alice@hcdc.edu.ph', status: 'attended', checkInTime: '12:55', checkOutTime: '16:05' },
-    { id: 'p4', name: 'Bob Wilson', email: 'bob@hcdc.edu.ph', status: 'attended', checkInTime: '13:00' }
+    { id: 'p3', name: 'Alice Johnson', email: 'alice@hcdc.edu.ph', status: 'attended', checkInTime: '12:55', checkOutTime: '16:05', hasEvaluated: false },
+    { id: 'p4', name: 'Bob Wilson', email: 'bob@hcdc.edu.ph', status: 'attended', checkInTime: '13:00', hasEvaluated: false }
   ],
   '3': []
 };
@@ -146,8 +149,21 @@ export const useStore = create<AppState>((set) => ({
       }
     };
   }),
+  submitEvaluation: (eventId, participantId, data) => set((state) => {
+    const eventParticipants = state.participants[eventId] || [];
+    const updatedParticipants = eventParticipants.map(p => 
+      p.id === participantId 
+        ? { ...p, hasEvaluated: true, evaluationData: data } 
+        : p
+    );
+    return {
+      participants: {
+        ...state.participants,
+        [eventId]: updatedParticipants
+      }
+    };
+  }),
   issueCertificate: (eventId, participantId) => set((state) => {
-     // In a real app, this would generate a record. For now, we just assume 'completed' status implies certificate.
      const eventParticipants = state.participants[eventId] || [];
      const updatedParticipants = eventParticipants.map(p => 
        p.id === participantId ? { ...p, status: 'completed' as const } : p
