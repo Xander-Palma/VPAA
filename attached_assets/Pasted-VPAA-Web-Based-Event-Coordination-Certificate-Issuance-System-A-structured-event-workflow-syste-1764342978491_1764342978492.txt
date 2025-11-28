@@ -1,0 +1,555 @@
+VPAA – Web-Based Event Coordination & Certificate Issuance System
+A structured event workflow system built for academic seminars, workshops, and institutional activities.
+
+1. FEATURES (FULL LIST)
+A. Admin Features
+1. Event Setup & Configuration
+Create single-session or multi-session events
+
+
+Add event details (title, agenda, speakers, session times)
+
+
+Set requirements (attendance only / attendance + evaluation / quiz required)
+
+
+Upload participant list (CSV/Excel)
+
+
+Configure certificate template per event
+
+
+2. Attendance Management
+Real-time QR/Barcode check-in
+
+
+Session-based time-in/time-out logs
+
+
+Admin override for manual attendance correction
+
+
+Activity timeline (visual view of attendance per participant)
+
+
+Automated conflict detection (late, missing sessions, duplicates)
+
+
+3. Evaluation & Engagement Tracking
+Custom evaluation builder (rating, short answers, checkbox)
+
+
+Conditional unlocking of evaluation (only after attendance)
+
+
+Analytics dashboards
+
+
+Exportable evaluation datasets (PDF/CSV)
+
+
+4. Certificate Management
+Eligibility engine validates requirements
+
+
+Automatic PDF certificate generation
+
+
+Auto-send certificates via email
+
+
+Event-wide certificate resend option
+
+
+Certificate authenticity QR code
+
+
+Archive all certificates per event
+
+
+5. User & Role Management
+Admin accounts with access levels
+
+
+Event organizers vs. system admins
+
+
+Audit logs (who edited what)
+
+
+6. Reports & History
+Attendance summary
+
+
+Participant completion report
+
+
+Evaluation analytics
+
+
+Certificate issuance logs
+
+
+Downloadable archives
+
+
+
+B. Participant Features
+1. Event Access
+Login using email or institution ID
+
+
+View upcoming & active events
+
+
+See requirements to complete
+
+
+2. Attendance
+Scan event QR code
+
+
+Real-time confirmation
+
+
+See personal attendance timeline
+
+
+3. Evaluation
+Auto-unlocked after attendance
+
+
+Clean and mobile-friendly evaluation form
+
+
+Submission confirmation page
+
+
+4. Certificate
+Download PDF in portal
+
+
+Email copy automatically sent
+
+
+Verification code/QR for authenticity
+
+
+
+2. TECH STACK (RECOMMENDED)
+Frontend
+Next.js 14 (App Router)
+
+
+Tailwind CSS (rapid UI design)
+
+
+Recharts (analytics visual charts)
+
+
+Axios for API calls
+
+
+Backend
+Option A: Node.js (Express.js)
+ Option B: Django REST Framework
+ (Choose depending on institution preference)
+Database
+Supabase (PostgreSQL)
+
+
+Row-level security (RLS) enabled
+
+
+Real-time subscription for attendance updates
+
+
+Authentication
+Supabase Auth (email/password or SSO)
+
+
+Optional: School ID-based login
+
+
+Email
+SendGrid API
+
+
+Nodemailer (SMTP fallback)
+
+
+QR / Barcode
+qrcode
+
+
+jsbarcode
+
+
+PDF Certificate
+pdfkit
+
+
+puppeteer (HTML → PDF)
+
+
+
+3. SYSTEM FLOW (DETAILED)
+1. Event Preparation
+Admin → Creates event → Sets requirements → Uploads participant list → Generates event QR code.
+2. Registration / Login
+Participant logs in → Views list of events → Selects event.
+3. Attendance Flow
+Participant → Scans event QR code → Backend logs attendance → Admin sees real-time updates.
+4. Evaluation Flow
+Evaluation becomes accessible ONLY after:
+Attendance is valid
+
+
+Session requirements are met
+
+
+Participant → Submits evaluation → Data stored → Admin receives analytics.
+5. Verification Engine
+System checks:
+Attendance completed?
+
+
+Evaluation finished?
+
+
+Quiz passed (if required)?
+
+
+If YES to all → eligible for certificate.
+6. Certificate
+Backend generates PDF
+
+
+Email sent automatically
+
+
+Participant downloads from portal
+
+
+Admin can resend or override
+
+
+7. Archiving & Reports
+Event closes → All data archived → Admin downloads reports (CSV/PDF) → Certificates stored permanently.
+
+4. SCREENS & MODULES
+Below is a modular breakdown of every screen.
+
+ADMIN SCREENS
+1. Login Screen
+Email / Password field
+
+
+“Forgot Password”
+
+
+“Sign In” button
+
+
+2. Dashboard
+Widgets:
+Total events
+
+
+Ongoing events
+
+
+Attendance today
+
+
+Certificates issued
+
+
+Quick shortcuts (Create Event, View Reports)
+
+
+3. Event List
+Columns:
+Event name
+
+
+Status (Upcoming / Ongoing / Completed)
+
+
+Required steps
+
+
+Participants count
+
+
+Actions (View, Edit, Reports)
+
+
+4. Event Creation
+Sections:
+Event Details
+
+
+Schedule
+
+
+Speakers / Trainers
+
+
+Requirements Setup
+
+
+Certificate Template selection
+
+
+Upload Participant List
+
+
+5. Attendance Monitor
+Real-time table:
+Participant name
+
+
+Time-in
+
+
+Time-out
+
+
+Status badges
+ Graphs:
+
+
+Attendance line graph
+
+
+Hourly check-in distribution
+
+
+6. Evaluation Dashboard
+Completion percentage summary
+
+
+Rating distribution charts
+
+
+Participant feedback list
+
+
+Export button
+
+
+7. Certificate Center
+List of generated certificates
+
+
+Resend button
+
+
+Download individually
+
+
+Regenerate option
+
+
+Certificate template editor
+
+
+8. Reports
+Attendance report
+
+
+Evaluation summary
+
+
+Completion list
+
+
+Exportable formats
+
+
+
+PARTICIPANT SCREENS
+1. Participant Login
+Email / ID input
+
+
+Password
+
+
+“My Certificates” shortcut
+
+
+2. Event List
+Event cards with status
+
+
+"Join Event" button
+
+
+3. Attendance Scanner
+Live camera (mobile)
+
+
+“Scan QR Code to Check-in”
+
+
+Success confirmation screen
+
+
+4. Evaluation Page
+Sections:
+Rating (1–5 stars)
+
+
+Instructor feedback
+
+
+Event feedback
+
+
+Suggestion box
+
+
+Submit button
+
+
+5. Certificate Page
+Certificate preview thumbnail
+
+
+Download PDF button
+
+
+Email sent confirmation
+
+
+QR for verification
+
+
+
+5. UI DESIGN NOTES (DETAILED PER SCREEN)
+Below is the actual layout, not generic notes.
+ This is suitable for prototyping.
+
+A. Admin UI Design
+Dashboard Layout
+---------------------------------------------------------
+|  VPAA Logo                 |   Profile Icon (top-right) |
+---------------------------------------------------------
+|  Cards (Row):                                          |
+|  [Total Events]  [Active Events]  [Attendance Today]   |
+---------------------------------------------------------
+|  Section: Recent Events                                |
+|  Table: Event Name | Date | Participants | Status       |
+---------------------------------------------------------
+
+Color scheme:
+Primary: #0F172A (navy slate)
+
+
+Accent: #3B82F6 (blue)
+
+
+Neutral: white / gray-100 / gray-700
+
+
+Typography:
+Inter / Poppins
+
+
+Bold headings
+
+
+Components:
+Rounded cards
+
+
+Minimal shadows
+
+
+Clean spacing (Tailwind-friendly)
+
+
+
+Event Creation UI
+Form Sections (Cards):
+[Event Details]
+- Title
+- Description
+- Category
+
+[Schedule]
+- Date Picker
+- Time Blocks (Start → End)
+
+[Speakers & Venue]
+
+[Requirements]
+- Toggle Attendance Required
+- Toggle Evaluation Required
+- Toggle Quiz Required
+
+[Participant Upload]
+- Upload CSV/Excel
+
+[Save Event Button]
+
+
+Attendance Monitoring UI
+Left Side:
+- Event Title
+- Stats: % present, total check-ins
+
+Right Side:
+- Live Table (auto-refresh)
+  Name | Status | Time-in | Time-out | Verification
+
+Graph section:
+Bar chart for hourly check-ins
+
+
+Pie chart for present vs absent
+
+
+
+Certificate Center UI
+Grid View:
+[Certificate Card]
+ - Thumbnail
+ - Participant Name
+ - Status: Sent / Not Sent
+ - Buttons: Download | Resend
+
+
+B. Participant UI Design
+Event List Screen
+Event Card:
+--------------------------------------------
+Title: VPAA Workshop
+Date & Time
+Status (Upcoming / Live)
+[JOIN EVENT] Button
+--------------------------------------------
+
+Attendance Scan UI
+Centered Camera View
+Frame Guide (QR Scan Box)
+Button: “Scan Now”
+Success Pop-Up
+
+Evaluation UI
+Header: Event Title
+Section 1: Star Ratings (5 stars)
+Section 2: Text Input (Feedback)
+Section 3: Suggestions Box
+[SUBMIT] Button (full width)
+
+Certificate UI
+Certificate Preview (thumbnail)
+[DOWNLOAD PDF]
+[SEND TO EMAIL]
+Verification QR (small)
+
+
+
