@@ -6,12 +6,14 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+// Declare module for rawBody for custom parsing
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
 
+// Middleware for JSON body parsing and rawBody extraction
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -20,8 +22,10 @@ app.use(
   }),
 );
 
+// Middleware for URL-encoded form parsing
 app.use(express.urlencoded({ extended: false }));
 
+// Custom logging function
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -33,6 +37,7 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Middleware for logging API request/response times and payloads
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -59,40 +64,44 @@ app.use((req, res, next) => {
   next();
 });
 
+// Async function to register routes and setup static or Vite
 (async () => {
   await registerRoutes(httpServer, app);
 
+  // Global error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    throw err; // Rethrow for logging
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Serve static files in production only
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
+    // Dynamically import Vite for development
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
+  // Set up the server to listen on a specified port
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+
+  // Bind to localhost (127.0.0.1). Only enable `reusePort` on platforms
+  // that support it (e.g., Linux). `reusePort` can cause ENOTSUP on
+  // some environments (notably Windows), so we guard it here.
+  const listenOptions: any = {
+    port,
+    host: "127.0.0.1",
+  };
+
+  if (process.platform === "linux") {
+    listenOptions.reusePort = true;
+  }
+
+  httpServer.listen(listenOptions, () => {
+    log(`Server is running on http://127.0.0.1:${port}`);
+  });
 })();
