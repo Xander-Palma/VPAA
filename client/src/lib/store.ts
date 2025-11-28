@@ -112,13 +112,19 @@ export const useStore = create<AppState>((set, get) => {
 
       // login can accept either (username, password) or a user object (legacy mock)
       login: async (usernameOrUser: any, password?: string) => {
-        // Legacy path: called with a user object from existing UI mock
-        if (typeof usernameOrUser === 'object') {
-          const userObj: User = usernameOrUser as User;
-          // do not set a token when using the local mock user
-          setAuth(userObj, null);
-          return;
-        }
+          // Legacy path: called with a user object from existing UI mock
+          if (typeof usernameOrUser === 'object') {
+            const userObj: User = usernameOrUser as User;
+            // do not set a token when using the local mock user
+            setAuth(userObj, null);
+            // ensure we populate events/participants for the legacy mock user
+            try {
+              await get().fetchEvents();
+            } catch (e) {
+              console.error('fetchEvents failed after legacy login', e);
+            }
+            return;
+          }
 
         const username = usernameOrUser as string;
         if (!username || !password) {
@@ -192,7 +198,19 @@ export const useStore = create<AppState>((set, get) => {
       return true;
     },
 
-    joinEvent: async (eventId, name, email) => {
+    joinEvent: async (eventId, a?, b?) => {
+      // support either (eventId, name, email) or (eventId, userObject)
+      let name: string;
+      let email: string;
+      if (typeof a === 'object' && a !== null) {
+        const userObj = a as any;
+        name = userObj.name || userObj.first_name || userObj.username || 'Anonymous';
+        email = userObj.email || '';
+      } else {
+        name = a ?? 'Anonymous';
+        email = b ?? '';
+      }
+
       const headers = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
       const res = await fetch(`${API_BASE}/events/${eventId}/join/`, {
         method: 'POST',
@@ -208,7 +226,7 @@ export const useStore = create<AppState>((set, get) => {
         const list = s.participants[key] ?? [];
         return {
           participants: { ...s.participants, [key]: [...list, participant] },
-          events: s.events.map((ev) => (String(ev.id) === key ? { ...ev, participants_count: (ev.participants_count || 0) + 1 } : ev)),
+          events: s.events.map((ev) => (String(ev.id) === key ? { ...ev, participantsCount: (ev.participantsCount || 0) + 1 } : ev)),
         };
       });
       return participant;
