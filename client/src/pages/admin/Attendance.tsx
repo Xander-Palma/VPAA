@@ -10,7 +10,7 @@ import { Search, QrCode, CheckCircle, XCircle, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AdminAttendance() {
-  const { events, participants, markAttendance } = useStore();
+  const { events, participants, markAttendance, token, fetchEvents } = useStore();
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -24,27 +24,76 @@ export default function AdminAttendance() {
     p.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSimulateScan = () => {
+  const handleScanQR = async (qrData: string) => {
+    if (!selectedEventId || !qrData) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Please select an event and scan a valid QR code.",
+      });
+      return;
+    }
+
     setIsScanning(true);
-    // Simulate finding a random registered participant after 2 seconds
-    setTimeout(() => {
-      const registered = eventParticipants.filter(p => p.status === 'registered');
-      if (registered.length > 0) {
-        const randomP = registered[Math.floor(Math.random() * registered.length)];
-        markAttendance(selectedEventId, randomP.id, 'attended');
-        toast({
-          title: "Scan Successful",
-          description: `Marked ${randomP.name} as present.`,
-        });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Scan Failed",
-          description: "No pending participants found to simulate scan.",
-        });
+    try {
+      const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Token ${token}`;
       }
+
+      const res = await fetch(`${API_BASE}/scan/qr/`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          qr_data: qrData,
+          event_id: selectedEventId
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err?.error || 'Scan failed');
+      }
+
+      const data = await res.json();
+      toast({
+        title: "Scan Successful",
+        description: data.message || `${data.participant?.name} marked as present.`,
+      });
+      
+      // Refresh events to update participant list
+      if (fetchEvents) {
+        await fetchEvents();
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Scan Failed",
+        description: error?.message || "Invalid QR code or participant not found.",
+      });
+    } finally {
       setIsScanning(false);
-    }, 2000);
+    }
+  };
+
+  const handleSimulateScan = async () => {
+    // For testing: simulate scanning a random participant's QR
+    const registered = eventParticipants.filter(p => p.status === 'registered');
+    if (registered.length > 0) {
+      const randomP = registered[Math.floor(Math.random() * registered.length)];
+      // Generate QR code format: USER-{user_id}-{code}
+      const qrData = `USER-${randomP.user || randomP.id}-TEST${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      await handleScanQR(qrData);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Scan Failed",
+        description: "No pending participants found. Participants need to register first.",
+      });
+    }
   };
 
   return (
@@ -123,7 +172,14 @@ export default function AdminAttendance() {
                         </TableCell>
                         <TableCell className="text-right">
                           {p.status === 'registered' ? (
-                            <Button size="sm" variant="outline" onClick={() => markAttendance(selectedEventId, p.id, 'attended')}>
+                            <Button size="sm" variant="outline" onClick={async () => {
+                              try {
+                                await markAttendance(p.id, 'attended');
+                                toast({ title: "Success", description: `${p.name} marked as present.` });
+                              } catch (error: any) {
+                                toast({ variant: "destructive", title: "Error", description: error?.message || "Failed to mark attendance." });
+                              }
+                            }}>
                               Mark Present
                             </Button>
                           ) : (

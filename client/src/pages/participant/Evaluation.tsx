@@ -22,19 +22,27 @@ export function EvaluationForm({ eventId, participantId, onClose }: EvaluationFo
   const [comments, setComments] = useState("");
   const [instructorRating, setInstructorRating] = useState("5");
   
-  const handleSubmit = () => {
-    submitEvaluation(eventId, participantId, {
-      rating,
-      instructorRating,
-      comments,
-      submittedAt: new Date().toISOString()
-    });
-    
-    toast({
-      title: "Evaluation Submitted",
-      description: "Thank you for your feedback! Your certificate is now ready.",
-    });
-    onClose();
+  const handleSubmit = async () => {
+    try {
+      await submitEvaluation(participantId, {
+        rating,
+        instructorRating,
+        comments,
+        submittedAt: new Date().toISOString()
+      });
+      
+      toast({
+        title: "Evaluation Submitted",
+        description: "Thank you for your feedback! Your certificate is now ready.",
+      });
+      onClose();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Submission Failed",
+        description: error?.message || "Please try again later.",
+      });
+    }
   };
 
   return (

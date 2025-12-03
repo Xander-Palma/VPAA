@@ -21,46 +21,46 @@ function Router() {
     <Switch>
       <Route path="/" component={Login} />
       
-      {/* Admin Routes */}
+      {/* Admin Routes - Only accessible by admins */}
       <Route path="/admin/dashboard">
-        <Layout>
+        <Layout requireAdmin={true}>
           <AdminDashboard />
         </Layout>
       </Route>
       <Route path="/admin/events">
-        <Layout>
+        <Layout requireAdmin={true}>
           <AdminEvents />
         </Layout>
       </Route>
       <Route path="/admin/attendance">
-         <Layout>
+         <Layout requireAdmin={true}>
             <AdminAttendance />
          </Layout>
       </Route>
       <Route path="/admin/certificates">
-         <Layout>
+         <Layout requireAdmin={true}>
             <AdminCertificates />
          </Layout>
       </Route>
       <Route path="/admin/reports">
-         <Layout>
+         <Layout requireAdmin={true}>
             <AdminReports />
          </Layout>
       </Route>
 
-      {/* Participant Routes */}
+      {/* Participant Routes - Only accessible by participants */}
       <Route path="/participant/dashboard">
-        <Layout>
+        <Layout requireParticipant={true}>
           <ParticipantDashboard />
         </Layout>
       </Route>
       <Route path="/participant/my-certificates">
-         <Layout>
+         <Layout requireParticipant={true}>
             <ParticipantCertificates />
          </Layout>
       </Route>
       <Route path="/participant/scan">
-         <Layout>
+         <Layout requireParticipant={true}>
             <ParticipantScan />
          </Layout>
       </Route>

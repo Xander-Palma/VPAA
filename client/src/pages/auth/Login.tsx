@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Lock, Mail, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import generatedImage from '@assets/generated_images/vpaa_event_system_logo.png';
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -19,27 +18,31 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [activeTab, setActiveTab] = useState("participant");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Hardcoded credentials check as per request
+    // Admin login via API (same as participant)
     if (activeTab === "admin") {
-      if (email === "adminvpaa@gmail.com" && password === "admin123") {
-        login({
-          id: "admin1",
-          email: "adminvpaa@gmail.com",
-          name: "VPAA Admin",
-          role: "admin"
-        });
+      if (email !== "adminvpaa@gmail.com") {
+        toast({ variant: "destructive", title: "Invalid email", description: "Please use adminvpaa@gmail.com" });
+        return;
+      }
+      
+      try {
+        await login(email, password);
         toast({ title: "Welcome back, Admin!" });
         setLocation("/admin/dashboard");
-      } else {
-        toast({ variant: "destructive", title: "Invalid credentials", description: "Please check your email and password." });
+      } catch (err: any) {
+        toast({ 
+          variant: "destructive", 
+          title: "Login Failed", 
+          description: err?.message || "Invalid credentials. Make sure the admin user exists in the database. Run: python django_backend/manage.py shell < django_backend/create_admin.py" 
+        });
       }
     } else {
-      // Participant login via API. If account doesn't exist, register then login.
-      if (!email.endsWith("@hcdc.edu.ph") || !password) {
-        toast({ variant: "destructive", title: "Login Failed", description: "Please use a valid @hcdc.edu.ph email and password." });
+      // Participant login - allow any email, if account doesn't exist, register then login
+      if (!email || !password) {
+        toast({ variant: "destructive", title: "Login Failed", description: "Please enter your email and password." });
         return;
       }
 
@@ -50,7 +53,7 @@ export default function Login() {
           setLocation("/participant/dashboard");
         } catch (err: any) {
           // if login failed, attempt to register the participant (auto-create)
-            try {
+          try {
             const name = email.split("@")[0];
             await register(email, name, password);
             toast({ title: "Account created and logged in" });
@@ -68,7 +71,7 @@ export default function Login() {
       <div className="w-full max-w-md animate-in zoom-in-95 duration-500">
         <div className="text-center mb-8">
           <div className="h-20 w-20 bg-primary rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-primary/20">
-            <img src={generatedImage} alt="Logo" className="h-16 w-16 object-contain" />
+            <img src="/logo.png" alt="Logo" className="h-16 w-16 object-contain" />
           </div>
           <h1 className="text-2xl font-bold font-heading text-slate-900 dark:text-white">VPAA Event System</h1>
           <p className="text-slate-500 dark:text-slate-400">Academic Event Coordination & Certificates</p>
@@ -93,7 +96,7 @@ export default function Login() {
                     <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                     <Input 
                       id="email" 
-                      placeholder={activeTab === "admin" ? "adminvpaa@gmail.com" : "name@hcdc.edu.ph"} 
+                      placeholder={activeTab === "admin" ? "adminvpaa@gmail.com" : "your@email.com"} 
                       className="pl-10"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -128,7 +131,7 @@ export default function Login() {
                 {activeTab === "admin" ? (
                   <p>Only authorized personnel can access the admin panel.</p>
                 ) : (
-                  <p>Use your institutional email to login.</p>
+                  <p>Use your email to login. New users will be automatically registered.</p>
                 )}
               </div>
             </Tabs>

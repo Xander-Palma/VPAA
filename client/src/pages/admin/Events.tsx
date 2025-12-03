@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as React from "react";
 import { useStore, Event } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,19 +10,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Calendar as CalendarIcon, MapPin, Clock, MoreHorizontal, Edit, Trash, Users, AlertTriangle, CheckCircle } from "lucide-react";
+import { Plus, Search, Calendar as CalendarIcon, MapPin, Clock, MoreHorizontal, Edit, Trash, Users, AlertTriangle, CheckCircle, Upload, Award, Eye } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AdminEvents() {
-  const { events, addEvent, updateEvent, deleteEvent, participants } = useStore();
+  const { events, addEvent, updateEvent, deleteEvent, participants, concludeEvent, uploadParticipants } = useStore();
   const [search, setSearch] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState<Partial<Event>>({
@@ -33,6 +37,17 @@ export default function AdminEvents() {
     location: "",
     requirements: { attendance: true, evaluation: true, quiz: false }
   });
+  const latestFormDataRef = React.useRef<Partial<Event>>(formData);
+  
+  // Keep ref in sync with formData
+  React.useEffect(() => {
+    latestFormDataRef.current = formData;
+  }, [formData]);
+  
+  // Memoize the callback to prevent infinite loops
+  const handleFormDataChange = React.useCallback((data: Partial<Event>) => {
+    setFormData(data);
+  }, []);
 
   const filteredEvents = events.filter(e => 
     e.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -52,22 +67,23 @@ export default function AdminEvents() {
   };
 
   const handleCreateEvent = () => {
-    if (!formData.title || !formData.date) {
+    const currentData = latestFormDataRef.current;
+    if (!currentData.title || !currentData.date) {
       toast({ variant: "destructive", title: "Missing fields", description: "Please fill in required fields." });
       return;
     }
 
     addEvent({
       id: Math.random().toString(36).substr(2, 9),
-      title: formData.title!,
-      description: formData.description || "",
-      date: formData.date!,
-      timeStart: formData.timeStart || "09:00",
-      timeEnd: formData.timeEnd || "17:00",
-      location: formData.location || "TBA",
+      title: currentData.title!,
+      description: currentData.description || "",
+      date: currentData.date!,
+      timeStart: currentData.timeStart || "09:00",
+      timeEnd: currentData.timeEnd || "17:00",
+      location: currentData.location || "TBA",
       status: 'upcoming',
       participantsCount: 0,
-      requirements: formData.requirements || { attendance: true, evaluation: true, quiz: false }
+      requirements: currentData.requirements || { attendance: true, evaluation: true, quiz: false }
     });
 
     setIsCreateOpen(false);
@@ -101,9 +117,13 @@ export default function AdminEvents() {
     toast({ title: "Event Deleted", description: "The event has been removed." });
   };
   
-  const handleConcludeEvent = (event: Event) => {
-    updateEvent(event.id, { status: 'completed' });
-    toast({ title: "Event Concluded", description: "Event marked as completed. Evaluation forms released." });
+  const handleConcludeEvent = async (event: Event) => {
+    try {
+      await concludeEvent(event.id);
+      toast({ title: "Event Concluded", description: "Event marked as completed. Evaluation forms released." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error?.message || "Failed to conclude event." });
+    }
   };
 
   const handleViewParticipants = (event: Event) => {
@@ -111,43 +131,163 @@ export default function AdminEvents() {
     setIsParticipantsOpen(true);
   };
 
-  const EventForm = ({ isEdit = false }) => (
-    <div className="grid gap-4 py-4">
-      <div className="grid gap-2">
-        <Label htmlFor="title">Event Title</Label>
-        <Input id="title" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="e.g. Annual Research Symposium" />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="desc">Description</Label>
-        <Textarea id="desc" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Event agenda and details..." />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
+  const handleUploadClick = (event: Event) => {
+    setSelectedEvent(event);
+    setIsUploadOpen(true);
+    setUploadFile(null);
+  };
+
+  const handleUploadParticipants = async () => {
+    if (!selectedEvent || !uploadFile) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a file." });
+      return;
+    }
+
+    try {
+      await uploadParticipants(selectedEvent.id, uploadFile);
+      toast({ title: "Success", description: "Participants uploaded successfully." });
+      setIsUploadOpen(false);
+      setUploadFile(null);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Upload Failed", description: error?.message || "Failed to upload participants." });
+    }
+  };
+
+  const EventForm = React.memo(({ isEdit = false, onDataChange, initialData, isDialogOpen }: { 
+    isEdit?: boolean; 
+    onDataChange?: (data: Partial<Event>) => void;
+    initialData?: Partial<Event>;
+    isDialogOpen?: boolean;
+  }) => {
+    // Use local state - initialize with empty form
+    const defaultFormData = {
+      title: "",
+      description: "",
+      date: "",
+      timeStart: "",
+      timeEnd: "",
+      location: "",
+      requirements: { attendance: true, evaluation: true, quiz: false }
+    };
+    
+    const [localFormData, setLocalFormData] = useState<Partial<Event>>(defaultFormData);
+    const updateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    const onDataChangeRef = React.useRef(onDataChange);
+    const prevDialogOpenRef = React.useRef(false);
+    
+    // Keep ref updated
+    React.useEffect(() => {
+      onDataChangeRef.current = onDataChange;
+    }, [onDataChange]);
+    
+    // Reset form when dialog opens for create, or load data for edit
+    React.useEffect(() => {
+      if (isDialogOpen && !prevDialogOpenRef.current) {
+        // Dialog just opened
+        if (initialData && Object.keys(initialData).length > 0) {
+          setLocalFormData(initialData);
+        } else {
+          setLocalFormData(defaultFormData);
+        }
+      }
+      prevDialogOpenRef.current = isDialogOpen || false;
+    }, [isDialogOpen, initialData]);
+    
+    // Update parent formData for preview (debounced to prevent infinite loops)
+    // Only update when dialog is open and data actually changes
+    React.useEffect(() => {
+      if (!isDialogOpen) return; // Don't update if dialog is closed
+      
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      updateTimeoutRef.current = setTimeout(() => {
+        if (onDataChangeRef.current) {
+          onDataChangeRef.current(localFormData);
+        }
+      }, 500); // Increased debounce to 500ms to reduce interruptions
+      
+      return () => {
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+        }
+      };
+    }, [localFormData, isDialogOpen]); // Only update when dialog is open
+    
+    const updateField = React.useCallback((field: string, value: any) => {
+      setLocalFormData(prev => {
+        const updated = { ...prev, [field]: value };
+        return updated;
+      });
+    }, []);
+    
+    return (
+      <div className="grid gap-4 py-4">
         <div className="grid gap-2">
-          <Label htmlFor="date">Date</Label>
-          <Input id="date" type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+          <Label htmlFor="title">Event Title</Label>
+          <Input 
+            id="title" 
+            value={localFormData.title || ""} 
+            onChange={e => updateField('title', e.target.value)} 
+            placeholder="e.g. Annual Research Symposium" 
+          />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="location">Location</Label>
-          <Input id="location" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="Room / Venue" />
+          <Label htmlFor="desc">Description</Label>
+          <Textarea 
+            id="desc" 
+            value={localFormData.description || ""} 
+            onChange={e => updateField('description', e.target.value)} 
+            placeholder="Event agenda and details..." 
+          />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="start">Start Time</Label>
-          <Input id="start" type="time" value={formData.timeStart} onChange={e => setFormData({...formData, timeStart: e.target.value})} />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="date">Date</Label>
+            <Input 
+              id="date" 
+              type="date" 
+              value={localFormData.date || ""} 
+              onChange={e => updateField('date', e.target.value)} 
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="location">Location</Label>
+            <Input 
+              id="location" 
+              value={localFormData.location || ""} 
+              onChange={e => updateField('location', e.target.value)} 
+              placeholder="Room / Venue" 
+            />
+          </div>
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="end">End Time</Label>
-          <Input id="end" type="time" value={formData.timeEnd} onChange={e => setFormData({...formData, timeEnd: e.target.value})} />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="start">Start Time</Label>
+            <Input 
+              id="start" 
+              type="time" 
+              value={localFormData.timeStart || ""} 
+              onChange={e => updateField('timeStart', e.target.value)} 
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="end">End Time</Label>
+            <Input 
+              id="end" 
+              type="time" 
+              value={localFormData.timeEnd || ""} 
+              onChange={e => updateField('timeEnd', e.target.value)} 
+            />
+          </div>
         </div>
-      </div>
       
       {isEdit && (
          <div className="grid gap-2">
            <Label htmlFor="status">Event Status</Label>
            <Select 
-             value={formData.status} 
-             onValueChange={(val: any) => setFormData({...formData, status: val})}
+             value={localFormData.status || "upcoming"} 
+             onValueChange={(val: any) => updateField('status', val)}
            >
              <SelectTrigger>
                <SelectValue placeholder="Status" />
@@ -168,25 +308,38 @@ export default function AdminEvents() {
             <span>Attendance Required</span>
             <span className="font-normal text-xs text-muted-foreground">Must scan QR code to pass</span>
           </Label>
-          <Switch id="req-attendance" checked={formData.requirements?.attendance} onCheckedChange={c => setFormData({...formData, requirements: {...formData.requirements!, attendance: c}})} />
+          <Switch 
+            id="req-attendance" 
+            checked={localFormData.requirements?.attendance ?? true} 
+            onCheckedChange={c => updateField('requirements', {...(localFormData.requirements || {}), attendance: c})} 
+          />
         </div>
         <div className="flex items-center justify-between">
           <Label htmlFor="req-eval" className="flex flex-col gap-1">
             <span>Evaluation Required</span>
             <span className="font-normal text-xs text-muted-foreground">Must submit feedback form</span>
           </Label>
-          <Switch id="req-eval" checked={formData.requirements?.evaluation} onCheckedChange={c => setFormData({...formData, requirements: {...formData.requirements!, evaluation: c}})} />
+          <Switch 
+            id="req-eval" 
+            checked={localFormData.requirements?.evaluation ?? true} 
+            onCheckedChange={c => updateField('requirements', {...(localFormData.requirements || {}), evaluation: c})} 
+          />
         </div>
         <div className="flex items-center justify-between">
           <Label htmlFor="req-quiz" className="flex flex-col gap-1">
             <span>Quiz Required</span>
             <span className="font-normal text-xs text-muted-foreground">Must pass assessment</span>
           </Label>
-          <Switch id="req-quiz" checked={formData.requirements?.quiz} onCheckedChange={c => setFormData({...formData, requirements: {...formData.requirements!, quiz: c}})} />
+          <Switch 
+            id="req-quiz" 
+            checked={localFormData.requirements?.quiz ?? false} 
+            onCheckedChange={c => updateField('requirements', {...(localFormData.requirements || {}), quiz: c})} 
+          />
         </div>
       </div>
     </div>
-  );
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -202,11 +355,83 @@ export default function AdminEvents() {
               <Plus className="h-4 w-4" /> Create Event
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[800px] max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Event</DialogTitle>
             </DialogHeader>
-            <EventForm />
+            <Tabs defaultValue="details" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="details">Event Details</TabsTrigger>
+                <TabsTrigger value="preview">Certificate Preview</TabsTrigger>
+              </TabsList>
+              <TabsContent value="details" className="mt-4">
+                <EventForm 
+                  onDataChange={handleFormDataChange} 
+                  initialData={formData}
+                  isDialogOpen={isCreateOpen}
+                />
+              </TabsContent>
+              <TabsContent value="preview" className="mt-4">
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 rounded-lg p-6 border-2 border-primary/20">
+                    <div className="aspect-[1.414] bg-white dark:bg-slate-950 rounded-md shadow-xl border-4 border-primary/40 p-12 flex flex-col items-center justify-center relative overflow-hidden max-w-2xl mx-auto">
+                      {/* Decorative border corners */}
+                      <div className="absolute top-4 left-4 w-12 h-12 border-t-4 border-l-4 border-primary/50"></div>
+                      <div className="absolute top-4 right-4 w-12 h-12 border-t-4 border-r-4 border-primary/50"></div>
+                      <div className="absolute bottom-4 left-4 w-12 h-12 border-b-4 border-l-4 border-primary/50"></div>
+                      <div className="absolute bottom-4 right-4 w-12 h-12 border-b-4 border-r-4 border-primary/50"></div>
+                      
+                      {/* Inner decorative border */}
+                      <div className="absolute top-6 left-6 right-6 bottom-6 border-2 border-primary/20"></div>
+                      
+                      {/* Certificate Content */}
+                      <div className="text-center space-y-6 z-10 relative">
+                        <div className="space-y-3">
+                          <h2 className="text-4xl font-bold text-primary tracking-wide">CERTIFICATE</h2>
+                          <h3 className="text-2xl font-bold text-primary/80 tracking-wide">OF PARTICIPATION</h3>
+                        </div>
+                        
+                        <div className="space-y-2 pt-6">
+                          <p className="text-base text-slate-600 dark:text-slate-400">This is to certify that</p>
+                          <div className="py-3">
+                            <p className="text-2xl font-bold text-slate-900 dark:text-white border-b-4 border-primary/40 pb-3 inline-block px-8">
+                              {formData.title ? "Participant Name" : "Sample Participant"}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2 pt-4">
+                          <p className="text-sm text-slate-600 dark:text-slate-400">has successfully completed the</p>
+                          <p className="text-lg font-bold text-primary">
+                            {formData.title || "Event Title"}
+                          </p>
+                          {formData.date && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 pt-1">
+                              held on {new Date(formData.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="pt-8 flex flex-col items-center gap-3">
+                          <div className="w-20 h-20 bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center border-2 border-slate-300 dark:border-slate-600">
+                            <Award className="h-10 w-10 text-slate-400" />
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono">Verification: VERIFY-XXXXXX</p>
+                          <p className="text-[10px] text-slate-400 font-mono">Certificate No: CERT-XXXXXX</p>
+                        </div>
+                        
+                        <div className="pt-6 border-t-2 border-slate-200 dark:border-slate-700 w-full">
+                          <p className="text-sm font-semibold text-primary">VPAA Event Coordination System</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center">
+                    This preview shows how certificates will appear for participants who complete this event.
+                  </p>
+                </div>
+              </TabsContent>
+            </Tabs>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
               <Button onClick={handleCreateEvent}>Save Event</Button>
@@ -220,7 +445,12 @@ export default function AdminEvents() {
             <DialogHeader>
               <DialogTitle>Edit Event</DialogTitle>
             </DialogHeader>
-            <EventForm isEdit={true} />
+            <EventForm 
+              isEdit={true} 
+              onDataChange={handleFormDataChange}
+              initialData={selectedEvent ? { ...selectedEvent } : formData}
+              isDialogOpen={isEditOpen}
+            />
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
               <Button onClick={handleUpdateEvent}>Update Event</Button>
@@ -242,6 +472,38 @@ export default function AdminEvents() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
               <Button variant="destructive" onClick={handleConfirmDelete}>Delete Event</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Upload Participants Dialog */}
+        <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Upload Participants</DialogTitle>
+              <DialogDescription>
+                Upload a CSV or Excel file with columns: name, email
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="file">Select File</Label>
+                <Input 
+                  id="file" 
+                  type="file" 
+                  accept=".csv,.xlsx,.xls"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Supported formats: CSV, Excel (.xlsx, .xls)
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsUploadOpen(false)}>Cancel</Button>
+              <Button onClick={handleUploadParticipants} disabled={!uploadFile}>
+                Upload
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -336,6 +598,9 @@ export default function AdminEvents() {
                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
                     <DropdownMenuItem onClick={() => handleViewParticipants(event)}>
                         <Users className="mr-2 h-4 w-4" /> View Participants
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleUploadClick(event)}>
+                        <Upload className="mr-2 h-4 w-4" /> Upload Participants (CSV/Excel)
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleEditClick(event)}>
                         <Edit className="mr-2 h-4 w-4" /> Edit Details

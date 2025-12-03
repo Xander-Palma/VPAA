@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FileCheck, Download, Mail, RefreshCcw, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
+
 export default function AdminCertificates() {
-  const { events, participants, issueCertificate } = useStore();
+  const { events, participants, issueCertificate, token, fetchEvents } = useStore();
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const { toast } = useToast();
 
@@ -34,20 +36,38 @@ export default function AdminCertificates() {
   const eligibleParticipants = eventParticipants.filter(isEligible);
   const completedParticipants = eventParticipants.filter(p => p.status === 'completed');
 
-  const handleIssueCertificate = (participantId: string) => {
-    issueCertificate(selectedEventId, participantId);
-    toast({
-      title: "Certificate Issued",
-      description: "The certificate has been generated and sent.",
-    });
+  const handleIssueCertificate = async (participantId: string) => {
+    try {
+      await issueCertificate(selectedEventId, participantId);
+      // Refresh events to update participant data with certificate
+      await fetchEvents();
+      toast({
+        title: "Certificate Issued",
+        description: "The certificate has been generated and sent.",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error?.message || "Failed to issue certificate.",
+      });
+    }
   };
 
-  const handleBulkIssue = () => {
-    eligibleParticipants.forEach(p => issueCertificate(selectedEventId, p.id));
-    toast({
-      title: "Bulk Action Complete",
-      description: `Issued certificates to ${eligibleParticipants.length} participants.`,
-    });
+  const handleBulkIssue = async () => {
+    try {
+      await Promise.all(eligibleParticipants.map(p => issueCertificate(selectedEventId, p.id)));
+      toast({
+        title: "Bulk Action Complete",
+        description: `Issued certificates to ${eligibleParticipants.length} participants.`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error?.message || "Some certificates failed to issue.",
+      });
+    }
   };
 
   return (
@@ -163,14 +183,52 @@ export default function AdminCertificates() {
                         <TableRow key={p.id}>
                           <TableCell className="font-medium">{p.name}</TableCell>
                           <TableCell>{new Date().toLocaleDateString()}</TableCell>
-                          <TableCell className="text-right flex justify-end gap-2">
-                            <Button size="icon" variant="outline" title="Download PDF">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button size="icon" variant="outline" title="Resend Email">
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
+                            <TableCell className="text-right flex justify-end gap-2">
+                              <Button 
+                                size="icon" 
+                                variant="outline" 
+                                title="Download PDF"
+                                onClick={async () => {
+                                  try {
+                                    const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
+                                    const headers: Record<string, string> = {};
+                                    const token = localStorage.getItem('token');
+                                    if (token) {
+                                      headers['Authorization'] = `Token ${token}`;
+                                    }
+                                    
+                                    // Find certificate by participant
+                                    const certRes = await fetch(`${API_BASE}/certificates/?participant=${p.id}`, { headers });
+                                    if (!certRes.ok) throw new Error('Certificate not found');
+                                    const certs = await certRes.json();
+                                    const cert = certs.results?.[0] || certs[0] || certs;
+                                    if (!cert || !cert.id) throw new Error('Certificate not found');
+                                    
+                                    const res = await fetch(`${API_BASE}/certificates/${cert.id}/download/`, { headers });
+                                    if (!res.ok) throw new Error('Failed to download certificate');
+                                    
+                                    const blob = await res.blob();
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `certificate_${cert.certificate_number || p.id}.pdf`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    window.URL.revokeObjectURL(url);
+                                    document.body.removeChild(a);
+                                    
+                                    toast({ title: "Download Started", description: "Certificate download initiated." });
+                                  } catch (error: any) {
+                                    toast({ variant: "destructive", title: "Error", description: error?.message || "Failed to download certificate." });
+                                  }
+                                }}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button size="icon" variant="outline" title="Resend Email">
+                                <Mail className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                         </TableRow>
                       ))
                     )}

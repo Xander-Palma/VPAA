@@ -5,19 +5,39 @@ import { useEffect } from "react";
 
 interface LayoutProps {
   children: React.ReactNode;
+  requireAdmin?: boolean;
+  requireParticipant?: boolean;
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, requireAdmin, requireParticipant }: LayoutProps) {
   const { currentUser } = useStore();
   const [, setLocation] = useLocation();
+  const isAdmin = currentUser?.role === 'admin';
+  const isParticipant = currentUser?.role === 'participant' || (!isAdmin && currentUser);
 
   useEffect(() => {
     if (!currentUser) {
       setLocation("/");
+      return;
     }
-  }, [currentUser, setLocation]);
 
-  if (!currentUser) return <>{children}</>;
+    // Check route permissions
+    if (requireAdmin && !isAdmin) {
+      setLocation("/participant/dashboard");
+      return;
+    }
+
+    if (requireParticipant && !isParticipant) {
+      setLocation("/admin/dashboard");
+      return;
+    }
+  }, [currentUser, isAdmin, isParticipant, requireAdmin, requireParticipant, setLocation]);
+
+  if (!currentUser) return null;
+
+  // Redirect if wrong role
+  if (requireAdmin && !isAdmin) return null;
+  if (requireParticipant && !isParticipant) return null;
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">

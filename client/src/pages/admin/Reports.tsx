@@ -1,13 +1,53 @@
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
 const COLORS = ['#0F172A', '#3B82F6', '#F59E0B', '#10B981'];
 
 export default function AdminReports() {
-  const { events, participants } = useStore();
+  const { events, participants, token } = useStore();
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const { toast } = useToast();
+
+  const handleDownloadReport = async (type: 'attendance' | 'evaluation', format: 'csv' | 'pdf' = 'csv') => {
+    if (!selectedEventId) {
+      toast({ variant: "destructive", title: "Error", description: "Please select an event first." });
+      return;
+    }
+
+    try {
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Token ${token}`;
+      }
+
+      const url = `${API_BASE}/reports/${type}/${selectedEventId}/?format=${format}`;
+      const res = await fetch(url, { headers });
+      
+      if (!res.ok) throw new Error('Failed to download report');
+
+      const blob = await res.blob();
+      const url_obj = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url_obj;
+      a.download = `${type}_report_${selectedEventId}.${format === 'csv' ? 'csv' : 'pdf'}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url_obj);
+      document.body.removeChild(a);
+
+      toast({ title: "Download Started", description: "Report download initiated." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error?.message || "Failed to download report." });
+    }
+  };
 
   // Calculate aggregate stats
   const eventStats = events.map(e => {
@@ -35,9 +75,31 @@ export default function AdminReports() {
           <h2 className="text-3xl font-bold tracking-tight">Reports & Analytics</h2>
           <p className="text-muted-foreground">Comprehensive data across all events.</p>
         </div>
-        <Button variant="outline" className="gap-2">
-          <Download className="h-4 w-4" /> Export All Data
-        </Button>
+        <div className="flex gap-2">
+          <Select value={selectedEventId} onValueChange={setSelectedEventId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select Event" />
+            </SelectTrigger>
+            <SelectContent>
+              {events.map(e => (
+                <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedEventId && (
+            <>
+              <Button variant="outline" className="gap-2" onClick={() => handleDownloadReport('attendance', 'csv')}>
+                <Download className="h-4 w-4" /> Attendance CSV
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={() => handleDownloadReport('attendance', 'pdf')}>
+                <Download className="h-4 w-4" /> Attendance PDF
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={() => handleDownloadReport('evaluation', 'csv')}>
+                <Download className="h-4 w-4" /> Evaluation CSV
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

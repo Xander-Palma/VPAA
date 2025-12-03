@@ -37,6 +37,12 @@ export interface Participant {
   checkOutTime?: string | null;
   hasEvaluated?: boolean;
   evaluationData?: any;
+  certificate?: {
+    certificate_number: string;
+    verification_code: string;
+    issued_at?: string;
+    emailed?: boolean;
+  } | null;
 }
 
 interface AppState {
@@ -51,9 +57,12 @@ interface AppState {
   updateEvent: (id: string | number, event: Partial<Event>) => Promise<Event | null>;
   deleteEvent: (id: string | number) => Promise<boolean>;
   joinEvent: (eventId: string | number, a?: any, b?: any) => Promise<Participant | null>;
-  markAttendance: (participantId: string | number, status: string) => Promise<Participant | null>;
+    markAttendance: (participantId: string | number, status?: string) => Promise<Participant | null>;
   submitEvaluation: (participantId: string | number, data: any) => Promise<Participant | null>;
-  issueCertificate: (participantId: string | number) => Promise<Participant | null>;
+  issueCertificate: (eventId: string | number, participantId: string | number) => Promise<any>;
+  downloadCertificate: (certificateId: string | number) => Promise<boolean>;
+  concludeEvent: (eventId: string | number) => Promise<Event | null>;
+  uploadParticipants: (eventId: string | number, file: File) => Promise<any>;
   register: (email: string, name: string, password: string) => Promise<void>;
 }
 
@@ -78,8 +87,8 @@ function normalizeEvent(raw: any): Event {
 function normalizeParticipant(raw: any): Participant {
   return {
     id: String(raw.id),
-    event: raw.event,
-    user: raw.user ?? raw.user,
+    event: String(raw.event) || raw.event,
+    user: raw.user ? (typeof raw.user === 'object' ? raw.user.id : raw.user) : null,
     name: raw.name,
     email: raw.email,
     status: raw.status,
@@ -87,6 +96,7 @@ function normalizeParticipant(raw: any): Participant {
     checkOutTime: raw.check_out_time ?? raw.checkOutTime ?? null,
     hasEvaluated: raw.has_evaluated ?? raw.hasEvaluated ?? false,
     evaluationData: raw.evaluation_data ?? raw.evaluationData ?? null,
+    certificate: raw.certificate || null,
   };
 }
 
@@ -154,6 +164,14 @@ export const useStore = create<AppState>((set, get) => {
         const data = await res.json();
         const token = data.token;
         const user = data.user;
+        // Set role based on email
+        if (user) {
+          if (user.email === 'adminvpaa@gmail.com' || user.is_staff || user.is_superuser) {
+            user.role = 'admin';
+          } else {
+            user.role = 'participant';
+          }
+        }
         setAuth(user, token);
         // fetch events after login
         await get().fetchEvents();
@@ -185,7 +203,14 @@ export const useStore = create<AppState>((set, get) => {
       if (!res.ok) return null;
       const createdRaw: any = await res.json();
       const created = normalizeEvent(createdRaw);
-      set((s) => ({ events: [created, ...s.events] }));
+      set((s) => {
+        const participantsMap = { ...s.participants };
+        participantsMap[String(created.id)] = created.participants ?? [];
+        return { 
+          events: [created, ...s.events],
+          participants: participantsMap
+        };
+      });
       return created;
     },
 
@@ -195,7 +220,14 @@ export const useStore = create<AppState>((set, get) => {
       if (!res.ok) return null;
       const updatedRaw: any = await res.json();
       const updated = normalizeEvent(updatedRaw);
-      set((s) => ({ events: s.events.map((e) => (String(e.id) === String(id) ? updated : e)) }));
+      set((s) => {
+        const participantsMap = { ...s.participants };
+        participantsMap[String(id)] = updated.participants ?? [];
+        return { 
+          events: s.events.map((e) => (String(e.id) === String(id) ? updated : e)),
+          participants: participantsMap
+        };
+      });
       return updated;
     },
 
@@ -226,25 +258,74 @@ export const useStore = create<AppState>((set, get) => {
         headers,
         body: JSON.stringify({ name, email }),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const error = await safeJson(res as unknown as Response);
+        const errorMsg = (error && typeof error === 'object' && error.error) ? error.error : (typeof error === 'string' ? error : 'Failed to join event');
+        throw new Error(errorMsg);
+      }
       const participantRaw: any = await res.json();
       const participant = normalizeParticipant(participantRaw);
-      // update participants and events
+      // Ensure event ID is set correctly
+      participant.event = String(eventId);
+      
+      // update participants and events immediately - DO THIS FIRST
       set((s) => {
         const key = String(eventId);
         const list = s.participants[key] ?? [];
+        // Check if participant already exists in list
+        const exists = list.some(p => 
+          String(p.id) === String(participant.id) || 
+          (p.email === participant.email && String(p.event) === String(eventId)) ||
+          (p.user && participant.user && String(p.user) === String(participant.user))
+        );
+        const updatedList = exists ? list.map(p => 
+          (String(p.id) === String(participant.id) || 
+           (p.email === participant.email && String(p.event) === String(eventId)) ||
+           (p.user && participant.user && String(p.user) === String(participant.user))) 
+            ? participant 
+            : p
+        ) : [...list, participant];
         return {
-          participants: { ...s.participants, [key]: [...list, participant] },
+          participants: { ...s.participants, [key]: updatedList },
           events: s.events.map((ev) => (String(ev.id) === key ? { ...ev, participantsCount: (ev.participantsCount || 0) + 1 } : ev)),
         };
+      });
+      
+      // Refresh events AFTER updating local state to merge with server data
+      // This ensures the admin panel sees the participant too
+      await new Promise(resolve => setTimeout(resolve, 200));
+      const currentState = get();
+      await currentState.fetchEvents();
+      // After fetchEvents, merge the participant we just added to ensure it's still there
+      set((s) => {
+        const key = String(eventId);
+        const serverList = s.participants[key] ?? [];
+        const existsInServer = serverList.some(p => 
+          String(p.id) === String(participant.id) ||
+          (p.email === participant.email && String(p.event) === String(eventId)) ||
+          (p.user && participant.user && String(p.user) === String(participant.user))
+        );
+        if (!existsInServer) {
+          return {
+            participants: { ...s.participants, [key]: [...serverList, participant] }
+          };
+        }
+        return {};
       });
       return participant;
     },
 
-    markAttendance: async (participantId, status) => {
+    markAttendance: async (participantId, status = 'attended') => {
       const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
-      const res = await fetch(`${API_BASE}/participants/${participantId}/`, { method: 'PATCH', headers, body: JSON.stringify({ status }) });
-      if (!res.ok) return null;
+      const res = await fetch(`${API_BASE}/participants/${participantId}/mark_attendance/`, { 
+        method: 'POST', 
+        headers, 
+        body: JSON.stringify({ type: 'in' }) 
+      });
+      if (!res.ok) {
+        const err = await safeJson(res as unknown as Response);
+        throw new Error(err?.error || err?.detail || 'Failed to mark attendance');
+      }
       const updatedRaw: any = await res.json();
       const updated = normalizeParticipant(updatedRaw);
       // update participants map
@@ -260,8 +341,15 @@ export const useStore = create<AppState>((set, get) => {
 
     submitEvaluation: async (participantId, data) => {
       const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
-      const res = await fetch(`${API_BASE}/participants/${participantId}/`, { method: 'PATCH', headers, body: JSON.stringify({ has_evaluated: true, evaluation_data: data }) });
-      if (!res.ok) return null;
+      const res = await fetch(`${API_BASE}/participants/${participantId}/submit_evaluation/`, { 
+        method: 'POST', 
+        headers, 
+        body: JSON.stringify({ evaluation_data: data }) 
+      });
+      if (!res.ok) {
+        const err = await safeJson(res as unknown as Response);
+        throw new Error(err?.error || err?.detail || 'Failed to submit evaluation');
+      }
       const updatedRaw: any = await res.json();
       const updated = normalizeParticipant(updatedRaw);
       set((s) => {
@@ -274,20 +362,69 @@ export const useStore = create<AppState>((set, get) => {
       return updated;
     },
 
-    issueCertificate: async (participantId) => {
+    issueCertificate: async (eventId, participantId) => {
       const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
-      const res = await fetch(`${API_BASE}/participants/${participantId}/`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'completed' }) });
+      const res = await fetch(`${API_BASE}/participants/${participantId}/issue_certificate/`, { 
+        method: 'POST', 
+        headers, 
+        body: JSON.stringify({ send_email: true }) 
+      });
+      if (!res.ok) {
+        const err = await safeJson(res as unknown as Response);
+        throw new Error(err?.error || err?.detail || 'Failed to issue certificate');
+      }
+      const certData: any = await res.json();
+      // Refresh events to get updated participant data with certificates
+      await get().fetchEvents();
+      return certData;
+    },
+    downloadCertificate: async (certificateId) => {
+      const headers: Record<string,string> = { ...authHeaders(get().token ?? undefined) };
+      const res = await fetch(`${API_BASE}/certificates/${certificateId}/download/`, { headers });
+      if (!res.ok) return false;
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `certificate_${certificateId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      return true;
+    },
+    concludeEvent: async (eventId) => {
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', ...authHeaders(get().token ?? undefined) };
+      const res = await fetch(`${API_BASE}/events/${eventId}/conclude/`, { method: 'POST', headers });
       if (!res.ok) return null;
       const updatedRaw: any = await res.json();
-      const updated = normalizeParticipant(updatedRaw);
+      const updated = normalizeEvent(updatedRaw.event);
       set((s) => {
-        const newMap = { ...s.participants };
-        Object.keys(newMap).forEach((k) => {
-          newMap[k] = newMap[k].map((p) => (String(p.id) === String(participantId) ? updated : p));
-        });
-        return { participants: newMap };
+        const participantsMap = { ...s.participants };
+        participantsMap[String(eventId)] = updated.participants ?? [];
+        return { 
+          events: s.events.map((e) => (String(e.id) === String(eventId) ? updated : e)),
+          participants: participantsMap
+        };
       });
       return updated;
+    },
+    uploadParticipants: async (eventId, file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const headers: Record<string,string> = { ...authHeaders(get().token ?? undefined) };
+      delete headers['Content-Type']; // Let browser set multipart boundary
+      const res = await fetch(`${API_BASE}/events/${eventId}/upload_participants/`, { 
+        method: 'POST', 
+        headers, 
+        body: formData 
+      });
+      if (!res.ok) {
+        const err = await safeJson(res as unknown as Response);
+        throw new Error(err?.error || 'Failed to upload participants');
+      }
+      await get().fetchEvents();
+      return await res.json();
     },
 
     register: async (email, name, password) => {
@@ -301,6 +438,10 @@ export const useStore = create<AppState>((set, get) => {
       const data = await res.json();
       const token = data.token;
       const user = data.user;
+      // Set role for participant (not admin)
+      if (user && user.email !== 'adminvpaa@gmail.com') {
+        user.role = 'participant';
+      }
       setAuth(user, token);
       try {
         await get().fetchEvents();
