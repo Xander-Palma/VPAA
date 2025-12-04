@@ -5,12 +5,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/auth/Login";
+import Landing from "@/pages/Landing";
 import { Layout } from "@/components/layout/Layout";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminEvents from "@/pages/admin/Events";
 import AdminAttendance from "@/pages/admin/Attendance";
 import AdminCertificates from "@/pages/admin/Certificates";
 import AdminReports from "@/pages/admin/Reports";
+import Events from "@/pages/Events";
 
 import ParticipantDashboard from "@/pages/participant/Dashboard";
 import ParticipantCertificates from "@/pages/participant/Certificates";
@@ -19,7 +21,8 @@ import ParticipantScan from "@/pages/participant/Scan";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Login} />
+      <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
       
       {/* Admin Routes - Only accessible by admins */}
       <Route path="/admin/dashboard">
@@ -47,6 +50,9 @@ function Router() {
             <AdminReports />
          </Layout>
       </Route>
+
+      {/* Public discovery page - Events (no Layout to avoid auth redirect) */}
+      <Route path="/events" component={Events} />
 
       {/* Participant Routes - Only accessible by participants */}
       <Route path="/participant/dashboard">
